@@ -2,6 +2,7 @@ package jenkins.plugins.jclouds.compute;
 
 import javax.annotation.Nullable;
 import javax.servlet.ServletException;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
@@ -16,6 +17,7 @@ import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 
 import com.google.inject.Module;
+
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AutoCompletionCandidates;
@@ -31,6 +33,7 @@ import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
+
 import org.jclouds.Constants;
 import org.jclouds.ContextBuilder;
 import org.jclouds.apis.Apis;
@@ -49,6 +52,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+
 import shaded.com.google.common.base.Objects;
 import shaded.com.google.common.base.Predicate;
 import shaded.com.google.common.base.Strings;
@@ -57,6 +61,7 @@ import shaded.com.google.common.collect.ImmutableSet.Builder;
 import shaded.com.google.common.collect.ImmutableSortedSet;
 import shaded.com.google.common.collect.Iterables;
 import shaded.com.google.common.io.Closeables;
+import sun.util.logging.resources.logging;
 
 /**
  * The JClouds version of the Jenkins Cloud.
@@ -80,6 +85,7 @@ public class JCloudsCloud extends Cloud {
 	public final List<JCloudsSlaveTemplate> templates;
 	public final int scriptTimeout;
 	public final int startTimeout;
+	public final String jcloudsLibraryProperties;
 	private transient ComputeService compute;
 	public final String zones;
 
@@ -101,7 +107,7 @@ public class JCloudsCloud extends Cloud {
 	@DataBoundConstructor
 	public JCloudsCloud(final String profile, final String providerName, final String identity, final String credential, final String privateKey,
 			final String publicKey, final String endPointUrl, final int instanceCap, final int retentionTime, final int scriptTimeout, final int startTimeout,
-			final String zones, final List<JCloudsSlaveTemplate> templates) {
+			final String jcloudsLibraryProperties, final String zones, final List<JCloudsSlaveTemplate> templates) {
 		super(Util.fixEmptyAndTrim(profile));
 		this.profile = Util.fixEmptyAndTrim(profile);
 		this.providerName = Util.fixEmptyAndTrim(providerName);
@@ -114,6 +120,7 @@ public class JCloudsCloud extends Cloud {
 		this.retentionTime = retentionTime;
 		this.scriptTimeout = scriptTimeout;
 		this.startTimeout = startTimeout;
+		this.jcloudsLibraryProperties = Util.fixNull(jcloudsLibraryProperties);
 		this.templates = Objects.firstNonNull(templates, Collections.<JCloudsSlaveTemplate> emptyList());
 		this.zones = Util.fixEmptyAndTrim(zones);
 		readResolve();
@@ -171,7 +178,15 @@ public class JCloudsCloud extends Cloud {
 				overrides.setProperty(ComputeServiceProperties.TIMEOUT_SCRIPT_COMPLETE, String.valueOf(scriptTimeout));
 			}
 			if (startTimeout > 0) {
-				overrides.setProperty(ComputeServiceProperties.TIMEOUT_NODE_RUNNING, String.valueOf(startTimeout));
+				overrides.setProperty(ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES, String.valueOf(startTimeout));
+			}
+			ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES
+			if(!Strings.isNullOrEmpty(this.jcloudsLibraryProperties)){
+				try {
+					overrides.load(new StringReader(this.jcloudsLibraryProperties));
+				} catch (IOException e) {
+					LOGGER.warning("jcloudsLibraryProperties parameter is unparsable");
+				}
 			}
 			this.compute = ctx(this.providerName, this.identity, this.credential, overrides, this.zones).getComputeService();
 		}

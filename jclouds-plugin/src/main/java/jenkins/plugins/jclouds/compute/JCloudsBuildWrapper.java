@@ -94,7 +94,7 @@ public class JCloudsBuildWrapper extends BuildWrapper {
 		return new Environment() {
 			@Override
 			public void buildEnvVars(Map<String, String> env) {
-				List<String> ips = getInstanceIPs(runningNode, listener.getLogger());
+				List<String> ips = getInstanceIPs(runningNode);
 				env.put("JCLOUDS_IPS", Util.join(ips, ","));
 			}
 
@@ -108,14 +108,12 @@ public class JCloudsBuildWrapper extends BuildWrapper {
 
 	}
 
-	public List<String> getInstanceIPs(Iterable<RunningNode> runningNodes, PrintStream logger) {
+	public List<String> getInstanceIPs(Iterable<RunningNode> runningNodes) {
 		Builder<String> ips = ImmutableList.<String> builder();
 
 		for (RunningNode runningNode : runningNodes) {
-			String[] possibleIPs = JCloudsLauncher.getConnectionAddresses(runningNode.getNode(), logger);
-			if (possibleIPs[0] != null) {
-				ips.add(possibleIPs[0]);
-			}
+			List<String> possibleIPs = JCloudsLauncher.getConnectionAddresses(runningNode.getNode());
+			ips.addAll(possibleIPs);
 		}
 
 		return ips.build();

@@ -9,9 +9,13 @@ import hudson.slaves.SlaveComputer;
 
 import java.io.IOException;
 import java.io.PrintStream;
+import java.util.List;
 
 import org.jclouds.compute.domain.NodeMetadata;
 import org.jclouds.domain.LoginCredentials;
+
+import shaded.com.google.common.collect.ImmutableList;
+import shaded.com.google.common.collect.ImmutableList.Builder;
 
 import com.trilead.ssh2.Connection;
 import com.trilead.ssh2.SCPClient;
@@ -151,13 +155,13 @@ public class JCloudsLauncher extends ComputerLauncher {
 	/**
 	 * Get the potential addresses to connect to, opting for public first and then private.
 	 */
-	public static String[] getConnectionAddresses(NodeMetadata nodeMetadata, PrintStream logger) {
-		if (nodeMetadata.getPublicAddresses().size() > 0) {
-			return nodeMetadata.getPublicAddresses().toArray(new String[nodeMetadata.getPublicAddresses().size()]);
-		} else {
-			logger.println("No public addresses found, so using private address.");
-			return nodeMetadata.getPrivateAddresses().toArray(new String[nodeMetadata.getPrivateAddresses().size()]);
-		}
+	public static List<String> getConnectionAddresses(NodeMetadata nodeMetadata) {
+		Builder<String> ipsBuilder = ImmutableList.builder();
+		
+		ipsBuilder.addAll(nodeMetadata.getPublicAddresses());
+		ipsBuilder.addAll(nodeMetadata.getPrivateAddresses());
+		
+		return ipsBuilder.build();
 	}
 
 	/**
@@ -172,29 +176,30 @@ public class JCloudsLauncher extends ComputerLauncher {
 	 */
 	private Connection connectToSsh(NodeMetadata nodeMetadata, PrintStream logger) throws InterruptedException {
 		while (true) {
-			try {
-
-				final String[] addresses = getConnectionAddresses(nodeMetadata, logger);
-				String host = addresses[0];
-				if ("0.0.0.0".equals(host)) {
-					logger.println("Invalid host 0.0.0.0, your host is most likely waiting for an ip address.");
-					throw new IOException("goto sleep");
-				}
-
-				logger.println("Connecting to " + host + " on port " + 22 + ". ");
-				Connection conn = new Connection(host, 22);
-				conn.connect(new ServerHostKeyVerifier() {
-					@Override
-					public boolean verifyServerHostKey(String hostname, int port, String serverHostKeyAlgorithm, byte[] serverHostKey) throws Exception {
-						return true;
+			final List<String> addresses = getConnectionAddresses(nodeMetadata);
+			for(String host: addresses){
+				try {
+					
+					if ("0.0.0.0".equals(host)) {
+						logger.println("Invalid host 0.0.0.0, your host is most likely waiting for an ip address.");
+						throw new IOException("goto sleep");
 					}
-				});
-				logger.println("Connected via SSH.");
-				return conn; // successfully connected
-			} catch (IOException e) {
-				// keep retrying until SSH comes up
-				logger.println("Waiting for SSH to come up. Sleeping 5.");
-				Thread.sleep(5000);
+	
+					logger.println("Connecting to " + host + " on port " + 22 + ". ");
+					Connection conn = new Connection(host, 22);
+					conn.connect(new ServerHostKeyVerifier() {
+						@Override
+						public boolean verifyServerHostKey(String hostname, int port, String serverHostKeyAlgorithm, byte[] serverHostKey) throws Exception {
+							return true;
+						}
+					});
+					logger.println("Connected via SSH.");
+					return conn; // successfully connected
+				} catch (IOException e) {
+					// keep retrying until SSH comes up
+					logger.println("Waiting for SSH to come up. Sleeping 5.");
+					Thread.sleep(5000);
+				}
 			}
 		}
 	}

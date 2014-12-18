@@ -9,6 +9,7 @@ import com.gargoylesoftware.htmlunit.WebAssert;
 import com.gargoylesoftware.htmlunit.html.HtmlButton;
 import com.gargoylesoftware.htmlunit.html.HtmlForm;
 import com.gargoylesoftware.htmlunit.html.HtmlPage;
+
 import org.junit.Rule;
 import org.junit.Test;
 import org.jvnet.hudson.test.JenkinsRule;
@@ -57,7 +58,7 @@ public class JCloudsCloudTest {
 	public void testConfigRoundtrip() throws Exception {
 
 		JCloudsCloud original = new JCloudsCloud("aws-profile", "aws-ec2", "identity", "credential", "privateKey", "publicKey", "endPointUrl", 1, 30,
-				600 * 1000, 600 * 1000, null, Collections.<JCloudsSlaveTemplate> emptyList());
+				600 * 1000, 600 * 1000, null, null, Collections.<JCloudsSlaveTemplate> emptyList());
 
 		j.getInstance().clouds.add(original);
         j.submit(j.createWebClient().goTo("configure").getFormByName("config"));
@@ -69,4 +70,20 @@ public class JCloudsCloudTest {
 				"profile,providerName,identity,credential,privateKey,publicKey,endPointUrl,instanceCap,retentionTime");
 	}
 
+    
+    @Test
+	public void testJcloudsAditionalProperties() throws Exception {
+
+		JCloudsCloud original = new JCloudsCloud("aws-profile", "aws-ec2", "identity", "credential", "privateKey", "publicKey", "endPointUrl", 1, 30,
+				600 * 1000, 600 * 1000, "", null, Collections.<JCloudsSlaveTemplate> emptyList());
+
+		j.getInstance().clouds.add(original);
+        j.submit(j.createWebClient().goTo("configure").getFormByName("config"));
+
+		j.assertEqualBeans(original, j.getInstance().clouds.getByName("aws-profile"),
+				"profile,providerName,identity,credential,privateKey,publicKey,endPointUrl,instanceCap,retentionTime");
+
+		j.assertEqualBeans(original, JCloudsCloud.getByName("aws-profile"),
+				"profile,providerName,identity,credential,privateKey,publicKey,endPointUrl,instanceCap,retentionTime");
+	}
 }

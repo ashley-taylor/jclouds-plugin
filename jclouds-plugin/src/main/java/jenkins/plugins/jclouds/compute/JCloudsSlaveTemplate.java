@@ -25,6 +25,7 @@ import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
+import hudson.tasks.Shell;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import jenkins.model.Jenkins;
@@ -76,6 +77,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 	public final String osVersion;
 	public final String locationId;
 	public final String initScript;
+	public final String masterInitScript;
 	public final String userData;
 	public final String numExecutors;
 	public final boolean stopOnTerminate;
@@ -94,8 +96,8 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 	public final boolean assignFloatingIp;
 	public final String keyPairName;
 	public final boolean assignPublicIp;
-        public final String networks;
-        public final String securityGroups;
+    public final String networks;
+    public final String securityGroups;
 
 	private transient Set<LabelAtom> labelSet;
 
@@ -103,7 +105,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 
 	@DataBoundConstructor
 	public JCloudsSlaveTemplate(final String name, final String imageId, final String imageNameRegex, final String hardwareId, final double cores,
-			final int ram, final String osFamily, final String osVersion, final String locationId, final String labelString, final String description,
+			final int ram, final String osFamily, final String osVersion, final String locationId, final String labelString, final String description, final String masterInitScript,
 			final String initScript, final String userData, final String numExecutors, final boolean stopOnTerminate, final String vmPassword, final String vmUser,
 			final boolean preInstalledJava, final String jvmOptions, final String jenkinsUser, final boolean preExistingJenkinsUser, final String fsRoot,
 			final boolean allowSudo, final boolean installPrivateKey, final int overrideRetentionTime, final int spoolDelayMs, final boolean assignFloatingIp,
@@ -121,6 +123,7 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 		this.labelString = Util.fixNull(labelString);
 		this.description = Util.fixNull(description);
 		this.initScript = Util.fixNull(initScript);
+		this.masterInitScript = Util.fixNull(masterInitScript);
 		this.userData = Util.fixNull(userData);
 		this.numExecutors = Util.fixNull(numExecutors);
 		this.vmPassword = Util.fixEmptyAndTrim(vmPassword);
@@ -318,6 +321,12 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 			options.runScript(bootstrap);
 		}
 
+		
+		if(this.masterInitScript.length() > 0){
+			
+			JcloudsMasterInitScript masterInit = new JcloudsMasterInitScript(this.masterInitScript);
+			options.initPredicate(masterInit);
+		}
 		if (userData != null) {
 			try {
 				Method userDataMethod = options.getClass().getMethod("userData", new byte[0].getClass());
@@ -329,7 +338,6 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
 		}
 
 		NodeMetadata nodeMetadata = null;
-
 		try {
 			nodeMetadata = getOnlyElement(getCloud().getCompute().createNodesInGroup(name, 1, template));
 		} catch (RunNodesException e) {
