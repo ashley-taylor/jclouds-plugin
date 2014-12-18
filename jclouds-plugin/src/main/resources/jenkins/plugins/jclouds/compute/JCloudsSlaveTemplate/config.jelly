@@ -87,6 +87,10 @@
         <f:entry title="Delay before spooling up (ms)" field="spoolDelayMs">
           <f:textbox />
         </f:entry>
+        
+        <f:entry title="Master Init Script" field="masterInitScript">
+          <f:textarea />
+        </f:entry>
       
         <f:entry title="Init Script" field="initScript">
           <f:textarea />

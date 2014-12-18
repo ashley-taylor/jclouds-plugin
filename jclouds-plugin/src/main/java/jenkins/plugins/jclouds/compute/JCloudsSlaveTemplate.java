@@ -25,6 +25,7 @@ import hudson.model.Descriptor;
 import hudson.model.Label;
 import hudson.model.TaskListener;
 import hudson.model.labels.LabelAtom;
+import hudson.tasks.Shell;
 import hudson.util.FormValidation;
 import hudson.util.ListBoxModel;
 import hudson.util.Secret;
@@ -62,107 +63,185 @@ import shaded.com.google.common.collect.ImmutableMap;
  */
 public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, Supplier<NodeMetadata> {
 
-    private static final Logger LOGGER = Logger.getLogger(JCloudsSlaveTemplate.class.getName());
-    private static final char SEPARATOR_CHAR = ',';
+	private static final Logger LOGGER = Logger.getLogger(JCloudsSlaveTemplate.class.getName());
+        private static final char SEPARATOR_CHAR = ',';
 
-    public final String name;
-    public final String imageId;
-    public final String imageNameRegex;
-    public final String hardwareId;
-    public final double cores;
-    public final int ram;
-    public final String osFamily;
-    public final String labelString;
-    public final String description;
-    public final String osVersion;
-    public final String locationId;
-    public final String initScript;
-    public final String userData;
-    public final String numExecutors;
-    public final boolean stopOnTerminate;
-    public final String vmUser;
-    public final String vmPassword;
-    public final boolean preInstalledJava;
-    private final String jvmOptions;
-    public final boolean preExistingJenkinsUser;
-    private final String jenkinsUser;
-    private final String fsRoot;
-    public final boolean allowSudo;
-    public final boolean installPrivateKey;
-    public final int overrideRetentionTime;
-    public final int spoolDelayMs;
-    private final Object delayLockObject = new Object();
-    public final boolean assignFloatingIp;
-    public final String keyPairName;
-    public final boolean assignPublicIp;
+	public final String name;
+	public final String imageId;
+	public final String imageNameRegex;
+	public final String hardwareId;
+	public final double cores;
+	public final int ram;
+	public final String osFamily;
+	public final String labelString;
+	public final String description;
+	public final String osVersion;
+	public final String locationId;
+	public final String initScript;
+	public final String masterInitScript;
+	public final String userData;
+	public final String numExecutors;
+	public final boolean stopOnTerminate;
+	public final String vmUser;
+	public final String vmPassword;
+	public final boolean preInstalledJava;
+	private final String jvmOptions;
+	public final boolean preExistingJenkinsUser;
+	private final String jenkinsUser;
+	private final String fsRoot;
+	public final boolean allowSudo;
+	public final boolean installPrivateKey;
+	public final int overrideRetentionTime;
+	public final int spoolDelayMs;
+	private final Object delayLockObject = new Object();
+	public final boolean assignFloatingIp;
+	public final String keyPairName;
+	public final boolean assignPublicIp;
     public final String networks;
     public final String securityGroups;
 
-    private transient Set<LabelAtom> labelSet;
+	private transient Set<LabelAtom> labelSet;
 
-    protected transient JCloudsCloud cloud;
+	protected transient JCloudsCloud cloud;
 
-    @DataBoundConstructor
-    public JCloudsSlaveTemplate(final String name, final String imageId, final String imageNameRegex, final String hardwareId, final double cores,
-                                final int ram, final String osFamily, final String osVersion, final String locationId, final String labelString, final String description,
-                                final String initScript, final String userData, final String numExecutors, final boolean stopOnTerminate, final String vmPassword, final String vmUser,
-                                final boolean preInstalledJava, final String jvmOptions, final String jenkinsUser, final boolean preExistingJenkinsUser, final String fsRoot,
-                                final boolean allowSudo, final boolean installPrivateKey, final int overrideRetentionTime, final int spoolDelayMs, final boolean assignFloatingIp,
-                                final String keyPairName, final boolean assignPublicIp, final String networks, final String securityGroups) {
+	@DataBoundConstructor
+	public JCloudsSlaveTemplate(final String name, final String imageId, final String imageNameRegex, final String hardwareId, final double cores,
+			final int ram, final String osFamily, final String osVersion, final String locationId, final String labelString, final String description, final String masterInitScript,
+			final String initScript, final String userData, final String numExecutors, final boolean stopOnTerminate, final String vmPassword, final String vmUser,
+			final boolean preInstalledJava, final String jvmOptions, final String jenkinsUser, final boolean preExistingJenkinsUser, final String fsRoot,
+			final boolean allowSudo, final boolean installPrivateKey, final int overrideRetentionTime, final int spoolDelayMs, final boolean assignFloatingIp,
+			final String keyPairName, final boolean assignPublicIp, final String networks, final String securityGroups) {
 
-        this.name = Util.fixEmptyAndTrim(name);
-        this.imageId = Util.fixEmptyAndTrim(imageId);
-        this.imageNameRegex = Util.fixEmptyAndTrim(imageNameRegex);
-        this.hardwareId = Util.fixEmptyAndTrim(hardwareId);
-        this.cores = cores;
-        this.ram = ram;
-        this.osFamily = Util.fixNull(osFamily);
-        this.osVersion = Util.fixNull(osVersion);
-        this.locationId = Util.fixEmptyAndTrim(locationId);
-        this.labelString = Util.fixNull(labelString);
-        this.description = Util.fixNull(description);
-        this.initScript = Util.fixNull(initScript);
-        this.userData = Util.fixNull(userData);
-        this.numExecutors = Util.fixNull(numExecutors);
-        this.vmPassword = Util.fixEmptyAndTrim(vmPassword);
-        this.vmUser = Util.fixEmptyAndTrim(vmUser);
-        this.preInstalledJava = preInstalledJava;
-        this.jvmOptions = Util.fixEmptyAndTrim(jvmOptions);
-        this.stopOnTerminate = stopOnTerminate;
-        this.jenkinsUser = Util.fixEmptyAndTrim(jenkinsUser);
-        this.preExistingJenkinsUser = preExistingJenkinsUser;
-        this.fsRoot = Util.fixEmptyAndTrim(fsRoot);
-        this.allowSudo = allowSudo;
-        this.installPrivateKey = installPrivateKey;
-        this.overrideRetentionTime = overrideRetentionTime;
-        this.spoolDelayMs = spoolDelayMs;
-        this.assignFloatingIp = assignFloatingIp;
-        this.keyPairName = keyPairName;
-        this.assignPublicIp = assignPublicIp;
-        this.networks = networks;
-        this.securityGroups = securityGroups;
-        readResolve();
-    }
+		this.name = Util.fixEmptyAndTrim(name);
+		this.imageId = Util.fixEmptyAndTrim(imageId);
+		this.imageNameRegex = Util.fixEmptyAndTrim(imageNameRegex);
+		this.hardwareId = Util.fixEmptyAndTrim(hardwareId);
+		this.cores = cores;
+		this.ram = ram;
+		this.osFamily = Util.fixNull(osFamily);
+		this.osVersion = Util.fixNull(osVersion);
+		this.locationId = Util.fixEmptyAndTrim(locationId);
+		this.labelString = Util.fixNull(labelString);
+		this.description = Util.fixNull(description);
+		this.initScript = Util.fixNull(initScript);
+		this.masterInitScript = Util.fixNull(masterInitScript);
+		this.userData = Util.fixNull(userData);
+		this.numExecutors = Util.fixNull(numExecutors);
+		this.vmPassword = Util.fixEmptyAndTrim(vmPassword);
+		this.vmUser = Util.fixEmptyAndTrim(vmUser);
+		this.preInstalledJava = preInstalledJava;
+		this.jvmOptions = Util.fixEmptyAndTrim(jvmOptions);
+		this.stopOnTerminate = stopOnTerminate;
+		this.jenkinsUser = Util.fixEmptyAndTrim(jenkinsUser);
+		this.preExistingJenkinsUser = preExistingJenkinsUser;
+		this.fsRoot = Util.fixEmptyAndTrim(fsRoot);
+		this.allowSudo = allowSudo;
+		this.installPrivateKey = installPrivateKey;
+		this.overrideRetentionTime = overrideRetentionTime;
+		this.spoolDelayMs = spoolDelayMs;
+		this.assignFloatingIp = assignFloatingIp;
+		this.keyPairName = keyPairName;
+		this.assignPublicIp = assignPublicIp;
+                this.networks = networks;
+                this.securityGroups = securityGroups;
+		readResolve();
+	}
 
-    public JCloudsCloud getCloud() {
-        return cloud;
-    }
+	public JCloudsCloud getCloud() {
+		return cloud;
+	}
 
-    /**
-     * Initializes data structure that we don't persist.
-     */
-    protected Object readResolve() {
-        labelSet = Label.parse(labelString);
-        return this;
-    }
+	/**
+	 * Initializes data structure that we don't persist.
+	 */
+	protected Object readResolve() {
+		labelSet = Label.parse(labelString);
+		return this;
+	}
 
-    public String getJenkinsUser() {
-        if (jenkinsUser == null || jenkinsUser.equals("")) {
-            return "jenkins";
-        } else {
-            return jenkinsUser;
-        }
-    }
+	public String getJenkinsUser() {
+		if (jenkinsUser == null || jenkinsUser.equals("")) {
+			return "jenkins";
+		} else {
+			return jenkinsUser;
+		}
+	}
+
+	public String getJvmOptions() {
+		if (jvmOptions == null) {
+			return "";
+		} else {
+			return jvmOptions;
+		}
+	}
+
+	public int getNumExecutors() {
+		return Util.tryParseNumber(numExecutors, 1).intValue();
+	}
+
+	public String getFsRoot() {
+		if (fsRoot == null || fsRoot.equals("")) {
+			return "/jenkins";
+		} else {
+			return fsRoot;
+		}
+	}
+
+	public Set<LabelAtom> getLabelSet() {
+		return labelSet;
+	}
+
+	public JCloudsSlave provisionSlave(TaskListener listener) throws IOException {
+		NodeMetadata nodeMetadata = get();
+
+		try {
+			return new JCloudsSlave(getCloud().getDisplayName(), getFsRoot(), nodeMetadata, labelString, description, numExecutors, stopOnTerminate,
+					overrideRetentionTime, getJvmOptions());
+		} catch (Descriptor.FormException e) {
+			throw new AssertionError("Invalid configuration " + e.getMessage());
+		}
+	}
+
+	@Override
+	public NodeMetadata get() {
+		LOGGER.info("Provisioning new jclouds node");
+		ImmutableMap<String, String> userMetadata = ImmutableMap.of("Name", name);
+		TemplateBuilder templateBuilder = getCloud().getCompute().templateBuilder();
+		if (!Strings.isNullOrEmpty(imageId)) {
+			LOGGER.info("Setting image id to " + imageId);
+			templateBuilder.imageId(imageId);
+		} else if (!Strings.isNullOrEmpty(imageNameRegex)) {
+			LOGGER.info("Setting image name regex to " + imageNameRegex);
+			templateBuilder.imageNameMatches(imageNameRegex);
+		} else {
+			if (!Strings.isNullOrEmpty(osFamily)) {
+				LOGGER.info("Setting osFamily to " + osFamily);
+				templateBuilder.osFamily(OsFamily.fromValue(osFamily));
+			}
+			if (!Strings.isNullOrEmpty(osVersion)) {
+				LOGGER.info("Setting osVersion to " + osVersion);
+				templateBuilder.osVersionMatches(osVersion);
+			}
+		}
+		if (!Strings.isNullOrEmpty((hardwareId))) {
+			LOGGER.info("Setting hardware Id to " + hardwareId);
+			templateBuilder.hardwareId(hardwareId);
+		} else {
+			LOGGER.info("Setting minRam " + ram + " and minCores " + cores);
+			templateBuilder.minCores(cores).minRam(ram);
+		}
+      if (!Strings.isNullOrEmpty(locationId)) {
+         LOGGER.info("Setting location Id to " + locationId);
+         templateBuilder.locationId(locationId);
+      }
+
+		Template template = templateBuilder.build();
+		TemplateOptions options = template.getOptions();
+
+                if (!Strings.isNullOrEmpty(networks)){
+                  LOGGER.info("Setting networks to " + networks);
+                  options.networks(csvToArray(networks));
+                }
 
     public String getJvmOptions() {
         if (jvmOptions == null) {
@@ -270,86 +349,91 @@ public class JCloudsSlaveTemplate implements Describable<JCloudsSlaveTemplate>, 
         } else if (!Strings.isNullOrEmpty(getCloud().privateKey) && !Strings.isNullOrEmpty(vmUser)) {
             // Skip overriding the credentials if we don't have a VM admin user specified - there are cases where we want the private
             // key but we don't to use it for the admin user creds.
-            LoginCredentials lc = LoginCredentials.builder().user(vmUser).privateKey(getCloud().privateKey).build();
-            options.overrideLoginCredentials(lc);
-        }
+			LoginCredentials lc = LoginCredentials.builder().user(vmUser).privateKey(getCloud().privateKey).build();
+			options.overrideLoginCredentials(lc);
+		}
 
-        if (spoolDelayMs > 0) {
-            // (JENKINS-15970) Add optional delay before spooling. Author: Adam Rofer
-            synchronized (delayLockObject) {
-                LOGGER.info("Delaying " + spoolDelayMs + " milliseconds. Current ms -> " + System.currentTimeMillis());
-                try {
-                    Thread.sleep(spoolDelayMs);
-                } catch (InterruptedException e) {
-                }
-            }
-        }
+		if (spoolDelayMs > 0) {
+			// (JENKINS-15970) Add optional delay before spooling. Author: Adam Rofer
+			synchronized (delayLockObject) {
+				LOGGER.info("Delaying " + spoolDelayMs + " milliseconds. Current ms -> " + System.currentTimeMillis());
+				try {
+					Thread.sleep(spoolDelayMs);
+				} catch (InterruptedException e) {
+				}
+			}
+		}
 
-        Statement initStatement = null;
-        Statement bootstrap = null;
+		Statement initStatement = null;
+		Statement bootstrap = null;
 
-        if (this.preExistingJenkinsUser) {
-            if (this.initScript.length() > 0) {
-                initStatement = Statements.exec(this.initScript);
-            }
-        } else {
-            // setup the jcloudTemplate to customize the nodeMetadata with jdk, etc. also opening ports
-            AdminAccess adminAccess = AdminAccess.builder().adminUsername(getJenkinsUser())
-                    .installAdminPrivateKey(installPrivateKey) // some VCS such as Git use SSH authentication
-                    .grantSudoToAdminUser(allowSudo) // no need
-                    .adminPrivateKey(getCloud().privateKey) // temporary due to jclouds bug
-                    .authorizeAdminPublicKey(true).adminPublicKey(getCloud().publicKey).adminHome(getFsRoot()).build();
+		if (this.preExistingJenkinsUser) {
+			if (this.initScript.length() > 0) {
+				initStatement = Statements.exec(this.initScript);
+			}
+		} else {
+			// setup the jcloudTemplate to customize the nodeMetadata with jdk, etc. also opening ports
+			AdminAccess adminAccess = AdminAccess.builder().adminUsername(getJenkinsUser())
+					.installAdminPrivateKey(installPrivateKey) // some VCS such as Git use SSH authentication
+					.grantSudoToAdminUser(allowSudo) // no need
+					.adminPrivateKey(getCloud().privateKey) // temporary due to jclouds bug
+					.authorizeAdminPublicKey(true).adminPublicKey(getCloud().publicKey).adminHome(getFsRoot()).build();
 
-            // Jenkins needs /jenkins dir.
-            Statement jenkinsDirStatement = Statements.newStatementList(Statements.exec("mkdir -p " + getFsRoot()),
-                    Statements.exec("chown " + getJenkinsUser() + " " + getFsRoot()));
+			// Jenkins needs /jenkins dir.
+			Statement jenkinsDirStatement = Statements.newStatementList(Statements.exec("mkdir -p " + getFsRoot()),
+					Statements.exec("chown " + getJenkinsUser() + " " + getFsRoot()));
 
-            initStatement = newStatementList(adminAccess, jenkinsDirStatement, Statements.exec(this.initScript));
-        }
+			initStatement = newStatementList(adminAccess, jenkinsDirStatement, Statements.exec(this.initScript));
+		}
 
-        if (preInstalledJava) {
-            bootstrap = initStatement;
-        } else {
-            bootstrap = newStatementList(initStatement, InstallJDK.fromOpenJDK());
-        }
+		if (preInstalledJava) {
+			bootstrap = initStatement;
+		} else {
+			bootstrap = newStatementList(initStatement, InstallJDK.fromOpenJDK());
+		}
 
-        options.inboundPorts(22).userMetadata(userMetadata);
+		options.inboundPorts(22).userMetadata(userMetadata);
 
-        if (bootstrap != null) {
-            options.runScript(bootstrap);
-        }
+		if (bootstrap != null) {
+			options.runScript(bootstrap);
+		}
 
-        if (userData != null) {
-            try {
-                Method userDataMethod = options.getClass().getMethod("userData", new byte[0].getClass());
-                LOGGER.info("Setting userData to " + userData);
-                userDataMethod.invoke(options, userData.getBytes());
-            } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "userData is not supported by provider options class " + options.getClass().getName(), e);
-            }
-        }
+		
+		if(this.masterInitScript.length() > 0){
+			
+			JcloudsMasterInitScript masterInit = new JcloudsMasterInitScript(this.masterInitScript);
+			options.initPredicate(masterInit);
+		}
+		if (userData != null) {
+			try {
+				Method userDataMethod = options.getClass().getMethod("userData", new byte[0].getClass());
+				LOGGER.info("Setting userData to " + userData);
+				userDataMethod.invoke(options, userData.getBytes());
+			} catch (Exception e) {
+				LOGGER.log(Level.WARNING, "userData is not supported by provider options class " + options.getClass().getName(), e);
+			}
+		}
 
-        NodeMetadata nodeMetadata = null;
+		NodeMetadata nodeMetadata = null;
+		try {
+			nodeMetadata = getOnlyElement(getCloud().getCompute().createNodesInGroup(name, 1, template));
+		} catch (RunNodesException e) {
+			throw destroyBadNodesAndPropagate(e);
+		}
 
-        try {
-            nodeMetadata = getOnlyElement(getCloud().getCompute().createNodesInGroup(name, 1, template));
-        } catch (RunNodesException e) {
-            throw destroyBadNodesAndPropagate(e);
-        }
+		// Check if nodeMetadata is null and throw
+		return nodeMetadata;
+	}
 
-        // Check if nodeMetadata is null and throw
-        return nodeMetadata;
-    }
+	private RuntimeException destroyBadNodesAndPropagate(RunNodesException e) {
+		for (Map.Entry<? extends NodeMetadata, ? extends Throwable> nodeError : e.getNodeErrors().entrySet()) {
+			getCloud().getCompute().destroyNode(nodeError.getKey().getId());
+		}
+		throw propagate(e);
+	}
 
-    private RuntimeException destroyBadNodesAndPropagate(RunNodesException e) {
-        for (Map.Entry<? extends NodeMetadata, ? extends Throwable> nodeError : e.getNodeErrors().entrySet()) {
-            getCloud().getCompute().destroyNode(nodeError.getKey().getId());
-        }
-        throw propagate(e);
-    }
-
-    private static String[] csvToArray(final String csv) {
-        try {
+        private static String[] csvToArray(final String csv) {
+          try {
             final CSVReader reader = new CSVReader(new StringReader(csv), SEPARATOR_CHAR);
             final String[] line = reader.readNext();
             return (line != null) ? line : new String[0];

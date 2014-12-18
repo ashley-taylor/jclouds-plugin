@@ -2,6 +2,7 @@ package jenkins.plugins.jclouds.compute;
 
 import javax.annotation.Nullable;
 import javax.servlet.ServletException;
+
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.StringReader;
@@ -16,6 +17,7 @@ import java.util.concurrent.Callable;
 import java.util.logging.Logger;
 
 import com.google.inject.Module;
+
 import hudson.Extension;
 import hudson.Util;
 import hudson.model.AutoCompletionCandidates;
@@ -32,6 +34,7 @@ import hudson.util.ListBoxModel;
 import hudson.util.Secret;
 import hudson.util.StreamTaskListener;
 import jenkins.model.Jenkins;
+
 import org.jclouds.Constants;
 import org.jclouds.ContextBuilder;
 import org.jclouds.apis.Apis;
@@ -50,6 +53,7 @@ import org.kohsuke.stapler.DataBoundConstructor;
 import org.kohsuke.stapler.QueryParameter;
 import org.kohsuke.stapler.StaplerRequest;
 import org.kohsuke.stapler.StaplerResponse;
+
 import shaded.com.google.common.base.Objects;
 import shaded.com.google.common.base.Predicate;
 import shaded.com.google.common.base.Strings;
@@ -58,6 +62,7 @@ import shaded.com.google.common.collect.ImmutableSet.Builder;
 import shaded.com.google.common.collect.ImmutableSortedSet;
 import shaded.com.google.common.collect.Iterables;
 import shaded.com.google.common.io.Closeables;
+import sun.util.logging.resources.logging;
 
 /**
  * The JClouds version of the Jenkins Cloud.
@@ -66,132 +71,142 @@ import shaded.com.google.common.io.Closeables;
  */
 public class JCloudsCloud extends Cloud {
 
-    static final Logger LOGGER = Logger.getLogger(JCloudsCloud.class.getName());
+	static final Logger LOGGER = Logger.getLogger(JCloudsCloud.class.getName());
 
-    public final String identity;
-    public final Secret credential;
-    public final String providerName;
+	public final String identity;
+	public final String credential;
+	public final String providerName;
 
-    public final String privateKey;
-    public final String publicKey;
-    public final String endPointUrl;
-    public final String profile;
-    private final int retentionTime;
-    public int instanceCap;
-    public final List<JCloudsSlaveTemplate> templates;
-    public final int scriptTimeout;
-    public final int startTimeout;
-    private transient ComputeService compute;
-    public final String zones;
+	public final String privateKey;
+	public final String publicKey;
+	public final String endPointUrl;
+	public final String profile;
+	private final int retentionTime;
+	public int instanceCap;
+	public final List<JCloudsSlaveTemplate> templates;
+	public final int scriptTimeout;
+	public final int startTimeout;
+	public final String jcloudsLibraryProperties;
+	private transient ComputeService compute;
+	public final String zones;
 
-    public static List<String> getCloudNames() {
-        List<String> cloudNames = new ArrayList<String>();
-        for (Cloud c : Hudson.getInstance().clouds) {
-            if (JCloudsCloud.class.isInstance(c)) {
-                cloudNames.add(c.name);
-            }
-        }
+	public static List<String> getCloudNames() {
+		List<String> cloudNames = new ArrayList<String>();
+		for (Cloud c : Hudson.getInstance().clouds) {
+			if (JCloudsCloud.class.isInstance(c)) {
+				cloudNames.add(c.name);
+			}
+		}
 
-        return cloudNames;
-    }
+		return cloudNames;
+	}
 
-    public static JCloudsCloud getByName(String name) {
-        return (JCloudsCloud) Hudson.getInstance().clouds.getByName(name);
-    }
+	public static JCloudsCloud getByName(String name) {
+		return (JCloudsCloud) Hudson.getInstance().clouds.getByName(name);
+	}
 
-    @DataBoundConstructor
-    public JCloudsCloud(final String profile, final String providerName, final String identity, final String credential, final String privateKey,
-                        final String publicKey, final String endPointUrl, final int instanceCap, final int retentionTime, final int scriptTimeout, final int startTimeout,
-                        final String zones, final List<JCloudsSlaveTemplate> templates) {
-        super(Util.fixEmptyAndTrim(profile));
-        this.profile = Util.fixEmptyAndTrim(profile);
-        this.providerName = Util.fixEmptyAndTrim(providerName);
-        this.identity = Util.fixEmptyAndTrim(identity);
-        this.credential = Secret.fromString(credential);
-        this.privateKey = privateKey;
-        this.publicKey = publicKey;
-        this.endPointUrl = Util.fixEmptyAndTrim(endPointUrl);
-        this.instanceCap = instanceCap;
-        this.retentionTime = retentionTime;
-        this.scriptTimeout = scriptTimeout;
-        this.startTimeout = startTimeout;
-        this.templates = Objects.firstNonNull(templates, Collections.<JCloudsSlaveTemplate>emptyList());
-        this.zones = Util.fixEmptyAndTrim(zones);
-        readResolve();
-    }
+	@DataBoundConstructor
+	public JCloudsCloud(final String profile, final String providerName, final String identity, final String credential, final String privateKey,
+			final String publicKey, final String endPointUrl, final int instanceCap, final int retentionTime, final int scriptTimeout, final int startTimeout,
+			final String jcloudsLibraryProperties, final String zones, final List<JCloudsSlaveTemplate> templates) {
+		super(Util.fixEmptyAndTrim(profile));
+		this.profile = Util.fixEmptyAndTrim(profile);
+		this.providerName = Util.fixEmptyAndTrim(providerName);
+		this.identity = Util.fixEmptyAndTrim(identity);
+		this.credential = Util.fixEmptyAndTrim(credential);
+		this.privateKey = privateKey;
+		this.publicKey = publicKey;
+		this.endPointUrl = Util.fixEmptyAndTrim(endPointUrl);
+		this.instanceCap = instanceCap;
+		this.retentionTime = retentionTime;
+		this.scriptTimeout = scriptTimeout;
+		this.startTimeout = startTimeout;
+		this.jcloudsLibraryProperties = Util.fixNull(jcloudsLibraryProperties);
+		this.templates = Objects.firstNonNull(templates, Collections.<JCloudsSlaveTemplate> emptyList());
+		this.zones = Util.fixEmptyAndTrim(zones);
+		readResolve();
+	}
 
-    protected Object readResolve() {
-        for (JCloudsSlaveTemplate template : templates)
-            template.cloud = this;
-        return this;
-    }
+	protected Object readResolve() {
+		for (JCloudsSlaveTemplate template : templates)
+			template.cloud = this;
+		return this;
+	}
 
-    /**
-     * Get the retention time, defaulting to 30 minutes.
-     */
-    public int getRetentionTime() {
-        if (retentionTime == 0) {
-            return 30;
-        } else {
-            return retentionTime;
-        }
-    }
+	/**
+	 * Get the retention time, defaulting to 30 minutes.
+	 */
+	public int getRetentionTime() {
+		if (retentionTime == 0) {
+			return 30;
+		} else {
+			return retentionTime;
+		}
+	}
 
-    static final Iterable<Module> MODULES = ImmutableSet.<Module>of(new SshjSshClientModule(), new JDKLoggingModule() {
-        @Override
-        public org.jclouds.logging.Logger.LoggerFactory createLoggerFactory() {
-            return new ComputeLogger.Factory();
-        }
-    }, new EnterpriseConfigurationModule());
+	static final Iterable<Module> MODULES = ImmutableSet.<Module> of(new SshjSshClientModule(), new JDKLoggingModule() {
+		@Override
+		public org.jclouds.logging.Logger.LoggerFactory createLoggerFactory() {
+			return new ComputeLogger.Factory();
+		}
+	}, new EnterpriseConfigurationModule());
 
-    static ComputeServiceContext ctx(String providerName, String identity, String credential, String endPointUrl, String zones) {
-        Properties overrides = new Properties();
-        if (!Strings.isNullOrEmpty(endPointUrl)) {
-            overrides.setProperty(Constants.PROPERTY_ENDPOINT, endPointUrl);
-        }
-        return ctx(providerName, identity, credential, overrides, zones);
-    }
+	static ComputeServiceContext ctx(String providerName, String identity, String credential, String endPointUrl, String zones) {
+		Properties overrides = new Properties();
+		if (!Strings.isNullOrEmpty(endPointUrl)) {
+			overrides.setProperty(Constants.PROPERTY_ENDPOINT, endPointUrl);
+		}
+		return ctx(providerName, identity, credential, overrides, zones);
+	}
 
-    static ComputeServiceContext ctx(String providerName, String identity, String credential, Properties overrides, String zones) {
-        if (!Strings.isNullOrEmpty(zones)) {
-            overrides.setProperty(LocationConstants.PROPERTY_ZONES, zones);
-        }
-        // correct the classloader so that extensions can be found
-        Thread.currentThread().setContextClassLoader(Apis.class.getClassLoader());
-        return ContextBuilder.newBuilder(providerName).credentials(identity, credential).overrides(overrides).modules(MODULES)
-                .buildView(ComputeServiceContext.class);
-    }
+	static ComputeServiceContext ctx(String providerName, String identity, String credential, Properties overrides, String zones) {
+		if (!Strings.isNullOrEmpty(zones)) {
+			overrides.setProperty(LocationConstants.PROPERTY_ZONES, zones);
+		}
+		// correct the classloader so that extensions can be found
+		Thread.currentThread().setContextClassLoader(Apis.class.getClassLoader());
+		return ContextBuilder.newBuilder(providerName).credentials(identity, credential).overrides(overrides).modules(MODULES)
+				.buildView(ComputeServiceContext.class);
+	}
 
-    public ComputeService getCompute() {
-        if (this.compute == null) {
-            Properties overrides = new Properties();
-            if (!Strings.isNullOrEmpty(this.endPointUrl)) {
-                overrides.setProperty(Constants.PROPERTY_ENDPOINT, this.endPointUrl);
-            }
-            if (scriptTimeout > 0) {
-                overrides.setProperty(ComputeServiceProperties.TIMEOUT_SCRIPT_COMPLETE, String.valueOf(scriptTimeout));
-            }
-            if (startTimeout > 0) {
-                overrides.setProperty(ComputeServiceProperties.TIMEOUT_NODE_RUNNING, String.valueOf(startTimeout));
-            }
-            this.compute = ctx(this.providerName, this.identity, Secret.toString(credential), overrides, this.zones).getComputeService();
-        }
-        return compute;
-    }
+	public ComputeService getCompute() {
+		if (this.compute == null) {
+			Properties overrides = new Properties();
+			if (!Strings.isNullOrEmpty(this.endPointUrl)) {
+				overrides.setProperty(Constants.PROPERTY_ENDPOINT, this.endPointUrl);
+			}
+			if (scriptTimeout > 0) {
+				overrides.setProperty(ComputeServiceProperties.TIMEOUT_SCRIPT_COMPLETE, String.valueOf(scriptTimeout));
+			}
+			if (startTimeout > 0) {
+				overrides.setProperty(ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES, String.valueOf(startTimeout));
+			}
+			ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES
+			if(!Strings.isNullOrEmpty(this.jcloudsLibraryProperties)){
+				try {
+					overrides.load(new StringReader(this.jcloudsLibraryProperties));
+				} catch (IOException e) {
+					LOGGER.warning("jcloudsLibraryProperties parameter is unparsable");
+				}
+			}
+			this.compute = ctx(this.providerName, this.identity, this.credential, overrides, this.zones).getComputeService();
+		}
+		return compute;
+	}
 
-    public List<JCloudsSlaveTemplate> getTemplates() {
-        return Collections.unmodifiableList(templates);
-    }
+	public List<JCloudsSlaveTemplate> getTemplates() {
+		return Collections.unmodifiableList(templates);
+	}
 
-    /**
-     * {@inheritDoc}
-     */
-    @Override
-    public Collection<NodeProvisioner.PlannedNode> provision(Label label, int excessWorkload) {
-        final JCloudsSlaveTemplate t = getTemplate(label);
+	/**
+	 * {@inheritDoc}
+	 */
+	@Override
+	public Collection<NodeProvisioner.PlannedNode> provision(Label label, int excessWorkload) {
+		final JCloudsSlaveTemplate t = getTemplate(label);
 
-        List<PlannedNode> r = new ArrayList<PlannedNode>();
-        while (excessWorkload > 0
+		List<PlannedNode> r = new ArrayList<PlannedNode>();
+		while (excessWorkload > 0
                 && !Jenkins.getInstance().isQuietingDown()
                 && !Jenkins.getInstance().isTerminating()) {
             if ((getRunningNodesCount() + r.size()) >= instanceCap) {
