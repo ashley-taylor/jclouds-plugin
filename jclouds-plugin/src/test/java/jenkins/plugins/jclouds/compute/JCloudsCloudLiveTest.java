@@ -29,7 +29,7 @@ public class JCloudsCloudLiveTest extends TestCase {
 				Collections.<JCloudsSlaveTemplate> emptyList());
 	}
 
-	public void testDoTestConnectionCorrectCredentialsEtc() {
+	public void testDoTestConnectionCorrectCredentialsEtc() throws IOException {
 		FormValidation result = new JCloudsCloud.DescriptorImpl().doTestConnection(fixture.getProvider(), fixture.getIdentity(), fixture.getCredential(),
 				generatedKeys.get("private"), fixture.getEndpoint(), null);
 		assertEquals("Connection succeeded!", result.getMessage());

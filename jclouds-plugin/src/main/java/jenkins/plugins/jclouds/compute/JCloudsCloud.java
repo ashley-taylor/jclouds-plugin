@@ -181,7 +181,6 @@ public class JCloudsCloud extends Cloud {
 			if (startTimeout > 0) {
 				overrides.setProperty(ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES, String.valueOf(startTimeout));
 			}
-			ComputeServiceProperties.SOCKET_FINDER_ALLOWED_INTERFACES
 			if(!Strings.isNullOrEmpty(this.jcloudsLibraryProperties)){
 				try {
 					overrides.load(new StringReader(this.jcloudsLibraryProperties));
